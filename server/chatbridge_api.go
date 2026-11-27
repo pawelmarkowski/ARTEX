@@ -88,6 +88,10 @@ func (s *Server) chatBridgeList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chatBridgeSave(w http.ResponseWriter, r *http.Request) {
+	if ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
+		return
+	}
 	pg := s.pg(w)
 	if pg == nil {
 		return
@@ -163,6 +167,10 @@ func (s *Server) chatBridgeSave(w http.ResponseWriter, r *http.Request) {
 // chatBridgeTest asks the chat app which bot the stored configuration
 // belongs to. It checks the token without sending any message.
 func (s *Server) chatBridgeTest(w http.ResponseWriter, r *http.Request) {
+	if ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
+		return
+	}
 	pg := s.pg(w)
 	if pg == nil {
 		return

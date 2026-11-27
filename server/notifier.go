@@ -131,6 +131,10 @@ func (n *Notifier) Run(ctx context.Context) {
 	if n.pg == nil {
 		return
 	}
+	if ExternalChannelsDisabled() {
+		log.Printf("[notify] outbound notification delivery disabled by policy (ARTEX_DISABLE_NOTIFY)")
+		return
+	}
 	t := time.NewTicker(notifyTick)
 	defer t.Stop()
 	for {
@@ -569,6 +573,9 @@ func (n *Notifier) takeTokens(channelID int64, ratePerMin, want int, now time.Ti
 
 // enabled reads the master switch.
 func (n *Notifier) enabled() bool {
+	if ExternalChannelsDisabled() {
+		return false
+	}
 	return n.pg.GetBool(settingNotifyEnabled, true)
 }
 

@@ -75,9 +75,6 @@ ARG NUCLEI_SHA256_ARM64=8044e3d9768ba0a744b2872c1a87e813006f013da97ca9f50f7661a4
 ARG HTTPX_VERSION=v1.12.0
 ARG HTTPX_SHA256_AMD64=9d8439e8b6c9aa7d1e2314817a392e00d5178da3af5652f7475f88868f418f76
 ARG HTTPX_SHA256_ARM64=fd7b123c1dfbc3d69f19f524e4eebcd6ec06b9a6cbd56813c76f11645197331e
-ARG SUBFINDER_VERSION=v2.17.0
-ARG SUBFINDER_SHA256_AMD64=a39c3e5c7a26ef3c430915c4d6cbf7716a00f26769a75e9405aba796142eba37
-ARG SUBFINDER_SHA256_ARM64=24913d49dddc1d3a5e99a4a7580da5be980959b9415b96f52c4f7f4124392190
 ARG KATANA_VERSION=v1.8.0
 ARG KATANA_SHA256_AMD64=cb027ae99d0757061b70c07a15c7a80f62c5a535ab52c4a329f80c4b0a7309d2
 ARG KATANA_SHA256_ARM64=80e269210727a855511ffac8dfb01297b2344742acec71a35e8ba4a67a90f0f2
@@ -96,11 +93,11 @@ RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \
       amd64) PD_ARCH=amd64; FFUF_ARCH=amd64; DALFOX_ARCH=x86_64; \
              NUCLEI_SUM="$NUCLEI_SHA256_AMD64"; HTTPX_SUM="$HTTPX_SHA256_AMD64"; \
-             SUBFINDER_SUM="$SUBFINDER_SHA256_AMD64"; KATANA_SUM="$KATANA_SHA256_AMD64"; \
+             KATANA_SUM="$KATANA_SHA256_AMD64"; \
              FFUF_SUM="$FFUF_SHA256_AMD64"; DALFOX_SUM="$DALFOX_SHA256_AMD64" ;; \
       arm64) PD_ARCH=arm64; FFUF_ARCH=arm64; DALFOX_ARCH=aarch64; \
              NUCLEI_SUM="$NUCLEI_SHA256_ARM64"; HTTPX_SUM="$HTTPX_SHA256_ARM64"; \
-             SUBFINDER_SUM="$SUBFINDER_SHA256_ARM64"; KATANA_SUM="$KATANA_SHA256_ARM64"; \
+             KATANA_SUM="$KATANA_SHA256_ARM64"; \
              FFUF_SUM="$FFUF_SHA256_ARM64"; DALFOX_SUM="$DALFOX_SHA256_ARM64" ;; \
       *) echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
@@ -120,8 +117,6 @@ RUN set -eux; \
       "nuclei_${NUCLEI_VERSION#v}_linux_${PD_ARCH}.zip" "$NUCLEI_SUM" nuclei; \
     fetch "$gh/projectdiscovery/httpx/releases/download/$HTTPX_VERSION" \
       "httpx_${HTTPX_VERSION#v}_linux_${PD_ARCH}.zip" "$HTTPX_SUM" httpx; \
-    fetch "$gh/projectdiscovery/subfinder/releases/download/$SUBFINDER_VERSION" \
-      "subfinder_${SUBFINDER_VERSION#v}_linux_${PD_ARCH}.zip" "$SUBFINDER_SUM" subfinder; \
     fetch "$gh/projectdiscovery/katana/releases/download/$KATANA_VERSION" \
       "katana_${KATANA_VERSION#v}_linux_${PD_ARCH}.zip" "$KATANA_SUM" katana; \
     fetch "$gh/ffuf/ffuf/releases/download/$FFUF_VERSION" \
@@ -160,13 +155,10 @@ RUN set -eux; \
 # ---------------------------------------------------------------- runtime ---
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 ARG TARGETARCH
-# Common tools: ripgrep / curl / vim, plus a set of recon staples (add/remove as needed).
+# Minimal web/API recon utilities only (L2/brute-force/lateral-movement tools stripped).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates ripgrep curl wget vim git jq unzip xz-utils \
-      dnsutils iputils-ping netcat-openbsd inetutils-telnet whois nmap \
-      arp-scan arping fping iproute2 netdiscover net-tools nfs-common \
-      python3-impacket python3-paramiko python3-scapy rpcbind sqlite3 xxd \
-      hashcat hydra john ncrack openssh-client ssh-audit sshpass \
+      ca-certificates ripgrep curl wget jq git unzip xz-utils \
+      dnsutils iproute2 netcat-openbsd sqlite3 xxd \
     && rm -rf /var/lib/apt/lists/*
 # Python packages needed by agent-generated scripts
 RUN pip install --no-cache-dir --break-system-packages \
@@ -218,7 +210,7 @@ ENV NUCLEI_TEMPLATES_DIR=/opt/nuclei-templates \
 # with the latest release inside the layer we are about to inspect.
 RUN set -eux; \
     ln -s /opt/sqlmap/sqlmap.py /usr/local/bin/sqlmap; \
-    nuclei -version >/dev/null; httpx -version; subfinder -version; katana -version; \
+    nuclei -version >/dev/null; httpx -version; katana -version; \
     ffuf -V >/dev/null; dalfox --version >/dev/null; sqlmap --version >/dev/null; \
     templates="$(nuclei -tl -silent -duc | wc -l)"; \
     echo "nuclei templates visible at build time: $templates"; \
@@ -227,8 +219,7 @@ RUN set -eux; \
 # bbot recursive recon orchestrator (#117): blacklanternsecurity/bbot, AGPL-3.0
 # (same license as ARTEX; standalone CLI dependency, not linked code). Pinned
 # version, own venv to isolate from the image python. Module dependencies are
-# preinstalled (--install-all-deps) so scans never need pip at runtime, which
-# would fail under a program's egress allowlist.
+# preinstalled into /opt/bbot-home so UID 1000 can symlink tools under emptyDir $HOME.
 ARG BBOT_VERSION=3.0.2
 # arm64: bbot's Chrome and retirejs's Node are x86-64; use native builds.
 RUN set -eux; \
@@ -242,14 +233,17 @@ RUN set -eux; \
       bbot_dir="$(/opt/bbot/bin/python -c 'import bbot, os; print(os.path.dirname(bbot.__file__))')"; \
       sed -i 's/linux-x64/linux-arm64/g' "$bbot_dir/modules/retirejs.py"; \
     fi; \
-    bbot -y --install-all-deps; \
+    mkdir -p /opt/bbot-home/.config/bbot /opt/bbot-home/.bbot; \
+    HOME=/opt/bbot-home bbot -y --install-all-deps; \
     if [ "${TARGETARCH:-amd64}" = "arm64" ]; then \
-      printf '\nmodules:\n  gowitness:\n    chrome_path: /usr/bin/chromium\n' >> /root/.config/bbot/bbot.yml; \
+      printf '\nmodules:\n  gowitness:\n    chrome_path: /usr/bin/chromium\n' >> /opt/bbot-home/.config/bbot/bbot.yml; \
     fi; \
-    bbot --version >/dev/null; \
-    bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert,gowitness,retirejs >/dev/null 2>&1 || true; \
-    bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert,gowitness,retirejs --no-color >/tmp/bbot-dry.log 2>&1 || true; \
-    ! grep -qE "Installing|ERRR|CRITICAL" /tmp/bbot-dry.log || { cat /tmp/bbot-dry.log; exit 1; }
+    HOME=/opt/bbot-home bbot --version >/dev/null; \
+    HOME=/opt/bbot-home bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert,gowitness,retirejs >/dev/null 2>&1 || true; \
+    HOME=/opt/bbot-home bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert,gowitness,retirejs --no-color >/tmp/bbot-dry.log 2>&1 || true; \
+    ! grep -qE "Installing|ERRR|CRITICAL" /tmp/bbot-dry.log || { cat /tmp/bbot-dry.log; exit 1; }; \
+    rm -f /tmp/bbot-dry.log; \
+    chmod -R a+rX /opt/bbot-home
 
 
 # Preinstall Playwright MCP and CLI (globally) so no network download is needed at runtime.
@@ -266,6 +260,7 @@ RUN set -eux; \
 ARG PLAYWRIGHT_MCP_VERSION=0.0.83
 ARG PLAYWRIGHT_CLI_VERSION=0.1.22
 ARG PLAYWRIGHT_VERSION=1.64.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 # playwright-core's exports map hides cli.js from require.resolve, so run the
 # binary npm links for @playwright/mcp instead: it is the copy MCP actually
 # loads, and it installs the Chromium revision that copy expects.
@@ -273,11 +268,8 @@ RUN npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" "@playwright/cli@
     && playwright-cli --help \
     && playwright install --with-deps chromium \
     && "$(npm root -g)/@playwright/mcp/node_modules/.bin/playwright-core" install chromium \
+    && chmod -R a+rX /opt/ms-playwright \
     && rm -rf /var/lib/apt/lists/*
-# Agent processes run as the executor with HOME and XDG_CACHE_HOME in the data
-# directory (server/execpriv_unix.go); the browsers installed above stay in root's
-# cache, which /root's 0711 lets the executor reach.
-ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 WORKDIR /app
 # Binary compiled from source in the build stage above.
 COPY --from=build /out/artex /app/artex
@@ -285,15 +277,23 @@ COPY --from=build /out/artex /app/artex
 # to artex — docker stop only signals PID 1; without forwarding, artex never receives it,
 # cannot shut down gracefully, and is hard-killed by SIGKILL after 10 seconds.
 COPY start.sh /app/start.sh
-RUN chmod +x /app/artex /app/start.sh && mkdir -p -m 0700 /app/keys \
-    && chmod 0711 /root
-# No setuid or setgid programs (su, passwd, mount, bbot's chrome_sandbox, ...): an
-# agent process runs as the executor and must not regain root through one, even
-# when the container runs without docker-compose.yml's no-new-privileges.
-RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} +
+COPY hardening/ /app/hardening/
 COPY skills/ /app/skills/
-# persistence points: data/ (traffic index, task files, transcripts) and keys/ (jwt.key, secret.key, via ARTEX_JWT_KEY_DIR)
-VOLUME ["/app/data", "/app/keys"]
+# Hardened non-root UID 1000:1000 runtime (Kubernetes PSS restricted + readOnlyRootFilesystem: true).
+RUN groupadd -g 1000 artex \
+    && useradd -u 1000 -g 1000 -d /var/lib/artex/exec-home -s /usr/sbin/nologin -M artex \
+    && chmod +x /app/artex /app/start.sh /app/hardening/apply-intercept-rules.sh \
+    && mkdir -p -m 0700 /app/keys /app/data /var/lib/artex/exec-home/.cache \
+    && chown -R 1000:1000 /app/keys /app/data /var/lib/artex \
+    && chmod -R a+rX /app/skills /app/hardening \
+    && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
+ENV ARTEX_UPDATE_CHECK=0 \
+    ARTEX_UNTRUSTED_BOUNDARY=1 \
+    ARTEX_DISABLE_NOTIFY=1 \
+    HOME=/var/lib/artex/exec-home
+# persistence points: /var/lib/artex (traffic index, task files, transcripts) and /app/keys (jwt.key, secret.key)
+VOLUME ["/var/lib/artex", "/app/keys"]
 EXPOSE 8787 8788
+USER 1000:1000
 ENTRYPOINT ["/app/start.sh"]
 CMD ["-addr", ":8787", "-proxy", ":8788"]

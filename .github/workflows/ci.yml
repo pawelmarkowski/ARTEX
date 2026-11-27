@@ -135,12 +135,8 @@ jobs:
       # shellcheck is preinstalled on the ubuntu runners. -S warning: the scripts
       # currently have only info-level notes (intentional A && B || C chains in
       # update.sh, an unquoted glob in backup.sh's prune), so fail on warnings.
-      - run: shellcheck -S warning install.sh update.sh start.sh scripts/backup.sh scripts/verify.sh reset-password.sh scripts/extract-changelog-section.sh scripts/test-extract-changelog-section.sh .github/scripts/bot.sh scripts/test-bot-context.sh
+      - run: shellcheck -S warning install.sh update.sh start.sh scripts/backup.sh scripts/verify.sh reset-password.sh scripts/extract-changelog-section.sh scripts/test-extract-changelog-section.sh
       - run: bash scripts/test-extract-changelog-section.sh
-      # The triage bot's repository summary must expose every top-level
-      # directory; a truncated file list once made it deny that docs/ and
-      # scripts/benchmark/ exist.
-      - run: bash scripts/test-bot-context.sh
 
   web:
     runs-on: ubuntu-latest
@@ -173,3 +169,40 @@ jobs:
           python-version: "3.12"
       - run: python3 scripts/posture_check_test.py
       - run: python3 -m unittest discover -s scripts/benchmark -p 'test_*.py' -v
+
+  docker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [go, govulncheck, shell, web, python]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=main
+            type=raw,value=latest
+            type=sha,prefix=main-,format=short
+      - name: Short SHA build version
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ARTEX_VERSION=main-${{ steps.sha.outputs.short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -3974,7 +3974,7 @@ func (s *Server) settingsPayload() map[string]any {
 		"noa_compaction": s.m.NoaCompactionEnabled(),
 		// Vulnerability IM push global settings. Channels are standalone resources managed via /api/notify/*;
 		// only the three items that "apply to all channels" live here.
-		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
+		"notify_enabled":             !ExternalChannelsDisabled() && s.m.pg.GetBool(settingNotifyEnabled, true),
 		"notify_public_base_url":     notifyPublicBaseURL(s.m.pg),
 		"notify_digest_interval_min": notifyDigestIntervalMin(s.m.pg),
 		// Render limits of IM messages; 0 = no truncation.
@@ -4072,6 +4072,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, 400, err.Error())
+		return
+	}
+	if req.NotifyEnabled != nil && *req.NotifyEnabled && ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
 		return
 	}
 	// Validated before any other field is written, so a bad value changes nothing.
