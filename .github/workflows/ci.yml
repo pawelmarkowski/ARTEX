@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   pull_request:
   workflow_dispatch:
 
@@ -172,7 +172,7 @@ jobs:
       - run: python3 -m unittest discover -s scripts/benchmark -p 'test_*.py' -v
 
   docker:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feat/')
     needs: [go, govulncheck, shell, web, python]
     runs-on: ubuntu-latest
     permissions:
@@ -191,9 +191,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=main
-            type=raw,value=latest
-            type=sha,prefix=main-,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix={{branch}}-,format=short
       - name: Short SHA build version
         id: sha
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
@@ -204,6 +204,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: ARTEX_VERSION=main-${{ steps.sha.outputs.short }}
+          build-args: ARTEX_VERSION=${{ github.ref_name }}-${{ steps.sha.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
