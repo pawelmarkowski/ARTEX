@@ -121,6 +121,22 @@ func (s *Server) notifyMeta(w http.ResponseWriter, r *http.Request) {
 	if pg == nil {
 		return
 	}
+	if ExternalChannelsDisabled() {
+		baseURL, _, _ := pg.GetSetting(settingNotifyPublicBaseURL)
+		digest, _, _ := pg.GetSetting(settingNotifyDigestMinutes)
+		writeJSON(w, 200, map[string]any{
+			"kinds":               []any{},
+			"enabled":             false,
+			"disabled_by_policy":  true,
+			"public_base_url":     baseURL,
+			"digest_interval_min": digest,
+			"defaults": map[string]any{
+				"digest_interval_min": notifyDefaultDigestMinutes,
+			},
+			"stats": map[string]any{},
+		})
+		return
+	}
 	kinds := make([]map[string]any, 0, len(notify.Kinds()))
 	for _, k := range notify.Kinds() {
 		ch, _ := notify.Get(k)
@@ -182,6 +198,10 @@ type notifyChannelRequest struct {
 }
 
 func (s *Server) notifyCreateChannel(w http.ResponseWriter, r *http.Request) {
+	if ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
+		return
+	}
 	pg := s.pg(w)
 	if pg == nil {
 		return
@@ -264,6 +284,10 @@ func (s *Server) notifyCreateChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) notifyUpdateChannel(w http.ResponseWriter, r *http.Request) {
+	if ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
+		return
+	}
 	pg := s.pg(w)
 	if pg == nil {
 		return
@@ -419,6 +443,10 @@ func (s *Server) notifyDeleteChannel(w http.ResponseWriter, r *http.Request) {
 // endpoint is therefore **synchronous**, with the timeout bounded by the notify
 // package's HTTP client (15 seconds).
 func (s *Server) notifyTestChannel(w http.ResponseWriter, r *http.Request) {
+	if ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
+		return
+	}
 	pg := s.pg(w)
 	if pg == nil {
 		return
@@ -516,6 +544,10 @@ func (s *Server) notifyListDeliveries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) notifyRetryDelivery(w http.ResponseWriter, r *http.Request) {
+	if ExternalChannelsDisabled() {
+		writeExternalChannelsDisabled(w)
+		return
+	}
 	pg := s.pg(w)
 	if pg == nil {
 		return

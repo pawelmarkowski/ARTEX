@@ -142,6 +142,10 @@ func (r *chatBridgeRunner) Run(ctx context.Context) {
 	if r == nil || r.pg == nil {
 		return
 	}
+	if ExternalChannelsDisabled() {
+		log.Printf("[chatbridge] external chat bridges disabled by policy (ARTEX_DISABLE_NOTIFY)")
+		return
+	}
 	var wg sync.WaitGroup
 	for _, kind := range chatbridge.Kinds() {
 		wg.Add(1)

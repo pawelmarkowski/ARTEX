@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -110,6 +111,16 @@ func run() int {
 		devNoIsolation = flag.Bool(server.DevNoIsolationFlag, false, "DEVELOPMENT ONLY: on Linux as root, start even when the agent isolation self-test fails; agent processes and file tools may then read the server's keys, config and database credentials")
 	)
 	flag.Parse()
+
+	// Ensure dataDir and $HOME/.cache exist before stores/tools start (important when
+	// running non-root UID 1000 over a fresh writable emptyDir + read-only rootfs).
+	if err := os.MkdirAll(*dataDir, 0o750); err != nil {
+		slog.Error("[config] create data directory failed", "data_dir", *dataDir, "err", err)
+		return 1
+	}
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		_ = os.MkdirAll(filepath.Join(home, ".cache"), 0o700)
+	}
 
 	// hand the build version to the server package so GET /api/health can report it
 	// to the frontend top bar.

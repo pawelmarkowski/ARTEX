@@ -1,6 +1,6 @@
 ---
 name: bbot-recon
-description: "Invoke this skill when a hunt task needs breadth-first recon on an authorized target: subdomain enumeration, subdomain-takeover surface, archived URLs, parameter mining, IP/ASN enrichment, or when one-shot tools (subfinder, httpx, nuclei) would need manual piping between steps. Runs bbot (recursive event-graph scanner, installed in the image) under hard program-policy gates: passive zero-touch mode when scanners are banned, active modules only when the program allows them."
+description: "Invoke this skill when a hunt task needs breadth-first recon on an authorized target: subdomain enumeration, subdomain-takeover surface, archived URLs, parameter mining, IP/ASN enrichment, or when one-shot tools (httpx, katana, nuclei) would need manual piping between steps. Runs bbot (recursive event-graph scanner, installed in the image) under hard program-policy gates: passive zero-touch mode when scanners are banned, active modules only when the program allows them."
 ---
 
 # bbot-recon: recursive recon under program-policy gates
@@ -8,7 +8,7 @@ description: "Invoke this skill when a hunt task needs breadth-first recon on an
 bbot (blacklanternsecurity/bbot, AGPL-3.0 like ARTEX, pinned v3.0.2 at
 `/usr/local/bin/bbot`, venv `/opt/bbot`, module dependencies preinstalled in
 the image) chains every discovery into an event graph and emits structured
-JSON. Use it for breadth. Keep the single-purpose tools (subfinder, httpx,
+JSON. Use it for breadth. Keep the single-purpose tools (httpx,
 katana, ffuf, nuclei) when you need exact control over individual requests or
 a single host.
 
@@ -22,7 +22,7 @@ a single host.
    - Active scanning allowed: Mode A is allowed; loud families still need the
      program to be explicit about aggressive scanning.
    - Loud/invasive families only under explicit permission, and prefer the
-     dedicated single tools (ffuf, nmap, nuclei) when they exist, for rate
+     dedicated single tools (ffuf, nuclei) when they exist, for rate
      control.
 3. **Scope discipline**: pass in-scope targets with `-t`, add `-b` blacklist
    entries for anything excluded (logout/auth endpoints, specific subdomains).

@@ -36,6 +36,16 @@ forward() {
 trap forward INT TERM
 
 delay=1
+if [ -n "${HOME:-}" ]; then
+	mkdir -p "$HOME/.cache" "$HOME/.bbot" "$HOME/.config/bbot" 2>/dev/null || true
+	chmod 0700 "$HOME" 2>/dev/null || true
+	if [ -d /opt/bbot-home/.bbot/tools ] && [ ! -e "$HOME/.bbot/tools" ]; then
+		ln -sfn /opt/bbot-home/.bbot/tools "$HOME/.bbot/tools" 2>/dev/null || true
+	fi
+	if [ -f /opt/bbot-home/.config/bbot/bbot.yml ] && [ ! -e "$HOME/.config/bbot/bbot.yml" ]; then
+		cp /opt/bbot-home/.config/bbot/bbot.yml "$HOME/.config/bbot/bbot.yml" 2>/dev/null || true
+	fi
+fi
 while :; do
 	"$BIN" "$@" &
 	child=$!
