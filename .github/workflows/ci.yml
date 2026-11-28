@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, fork-main, 'feat/**']
   pull_request:
   workflow_dispatch:
 
@@ -172,7 +172,7 @@ jobs:
       - run: python3 -m unittest discover -s scripts/benchmark -p 'test_*.py' -v
 
   docker:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feat/')
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fork-main' || startsWith(github.ref, 'refs/heads/feat/')
     needs: [go, govulncheck, shell, web, python]
     runs-on: ubuntu-latest
     permissions:
